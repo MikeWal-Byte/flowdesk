@@ -1,3 +1,11 @@
+export interface AuthUser {
+  id: string
+  firstName: string
+  lastName: string
+  username: string
+  isAdmin: boolean
+}
+
 export type Priority = 1 | 2 | 3
 
 export type ColumnId = 'not-started' | 'in-progress' | 'completed' | 'on-hold'
@@ -9,6 +17,7 @@ export interface Project {
   color: string
   created_at: string
   updated_at: string
+  user_id?: string | null
 }
 
 export interface ProjectCard {
@@ -40,6 +49,7 @@ export interface DailyTask {
   completed: boolean
   task_date: string
   created_at: string
+  user_id?: string | null
 }
 
 export type CalendarEventType = 'note' | 'project' | 'task'
@@ -54,6 +64,7 @@ export interface CalendarEvent {
   color: string
   notes: string | null
   created_at: string
+  user_id?: string | null
 }
 
 export interface Note {
@@ -62,6 +73,7 @@ export interface Note {
   content: string
   created_at: string
   updated_at: string
+  user_id?: string | null
 }
 
 export const COLUMNS: { id: ColumnId; label: string; color: string; bg: string }[] = [

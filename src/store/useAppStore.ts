@@ -1,10 +1,17 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
+import { useAuthStore } from './useAuthStore'
 import type {
   Project, ProjectCard, CardTodo,
   DailyTask, CalendarEvent, Note,
   ColumnId, Priority,
 } from '../types'
+
+function getCurrentUserId(): string {
+  const id = useAuthStore.getState().user?.id
+  if (!id) throw new Error('Not authenticated')
+  return id
+}
 
 interface AppState {
   // ── Projects ──────────────────────────────────
@@ -59,6 +66,9 @@ interface AppState {
   updateNote: (id: string, updates: Partial<Note>) => Promise<void>
   deleteNote: (id: string) => Promise<void>
   setActiveNote: (id: string | null) => void
+
+  // ── Auth helpers ───────────────────────────────
+  clearData: () => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -71,12 +81,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchProjects: async () => {
     set({ loadingProjects: true })
-    const { data } = await supabase.from('projects').select('*').order('created_at', { ascending: false })
+    const userId = getCurrentUserId()
+    const { data } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
     set({ projects: data ?? [], loadingProjects: false })
   },
 
   createProject: async (title, description, color) => {
-    const { data } = await supabase.from('projects').insert({ title, description, color }).select().single()
+    const user_id = getCurrentUserId()
+    const { data } = await supabase.from('projects').insert({ title, description, color, user_id }).select().single()
     if (data) set(s => ({ projects: [data, ...s.projects] }))
   },
 
@@ -175,12 +191,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchDailyTasks: async (date) => {
     set({ loadingTasks: true })
-    const { data } = await supabase.from('daily_tasks').select('*').eq('task_date', date).order('created_at')
+    const userId = getCurrentUserId()
+    const { data } = await supabase
+      .from('daily_tasks')
+      .select('*')
+      .eq('task_date', date)
+      .eq('user_id', userId)
+      .order('created_at')
     set({ dailyTasks: data ?? [], loadingTasks: false })
   },
 
   createDailyTask: async (text, date) => {
-    const { data } = await supabase.from('daily_tasks').insert({ text, task_date: date }).select().single()
+    const user_id = getCurrentUserId()
+    const { data } = await supabase.from('daily_tasks').insert({ text, task_date: date, user_id }).select().single()
     if (data) set(s => ({ dailyTasks: [...s.dailyTasks, data] }))
   },
 
@@ -198,12 +221,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   calendarEvents: [],
 
   fetchCalendarEvents: async () => {
-    const { data } = await supabase.from('calendar_events').select('*').order('event_date')
+    const userId = getCurrentUserId()
+    const { data } = await supabase
+      .from('calendar_events')
+      .select('*')
+      .eq('user_id', userId)
+      .order('event_date')
     set({ calendarEvents: data ?? [] })
   },
 
   createCalendarEvent: async (eventData) => {
-    const { data } = await supabase.from('calendar_events').insert(eventData).select().single()
+    const user_id = getCurrentUserId()
+    const { data } = await supabase.from('calendar_events').insert({ ...eventData, user_id }).select().single()
     if (data) set(s => ({ calendarEvents: [...s.calendarEvents, data] }))
   },
 
@@ -224,14 +253,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchNotes: async () => {
     set({ loadingNotes: true })
-    const { data } = await supabase.from('notes').select('*').order('updated_at', { ascending: false })
+    const userId = getCurrentUserId()
+    const { data } = await supabase
+      .from('notes')
+      .select('*')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
     set({ notes: data ?? [], loadingNotes: false })
   },
 
   createNote: async () => {
+    const user_id = getCurrentUserId()
     const { data } = await supabase
       .from('notes')
-      .insert({ title: 'Untitled Note', content: '' })
+      .insert({ title: 'Untitled Note', content: '', user_id })
       .select()
       .single()
     if (data) {
@@ -258,4 +293,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setActiveNote: (id) => set({ activeNoteId: id }),
+
+  // ── Auth helpers ───────────────────────────────
+  clearData: () => set({
+    projects: [], projectCards: [], cardTodos: [],
+    dailyTasks: [], calendarEvents: [], notes: [],
+    activeProjectId: null, activeNoteId: null,
+  }),
 }))

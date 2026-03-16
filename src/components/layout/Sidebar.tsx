@@ -1,5 +1,6 @@
-import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, CalendarDays, StickyNote, CheckSquare, X, Zap, Columns2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { LayoutDashboard, CalendarDays, StickyNote, CheckSquare, X, Zap, Columns2, ChevronLeft, ChevronRight, Shield, LogOut } from 'lucide-react'
+import { useAuthStore } from '../../store/useAuthStore'
 
 const NAV_ITEMS = [
   { to: '/',         icon: LayoutDashboard, label: 'Projects' },
@@ -18,6 +19,15 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ open, onClose, collapsed, onToggleCollapse, splitActive, onToggleSplit }: SidebarProps) {
+  const user = useAuthStore(s => s.user)
+  const logout = useAuthStore(s => s.logout)
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <>
       {/* Overlay for mobile */}
@@ -93,10 +103,51 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse, sp
               )}
             </NavLink>
           ))}
+
+          {/* Admin link — only for admins */}
+          {user?.isAdmin && (
+            <NavLink
+              to="/admin"
+              onClick={() => { if (window.innerWidth < 1024) onClose() }}
+              className={({ isActive }) =>
+                `flex items-center rounded-xl text-sm font-medium transition-all duration-150 group
+                ${collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-4 py-3'}
+                ${isActive
+                  ? 'bg-white/20 text-white shadow-inner'
+                  : 'text-zinc-300 hover:bg-white/10 hover:text-white'
+                }`
+              }
+              title={collapsed ? 'Admin' : undefined}
+            >
+              {({ isActive }) => (
+                <>
+                  <span className={`p-1.5 rounded-lg transition-colors flex-shrink-0
+                    ${isActive ? 'bg-white/20' : 'bg-transparent group-hover:bg-white/10'}`}>
+                    <Shield className="w-4 h-4" />
+                  </span>
+                  {!collapsed && 'Admin'}
+                </>
+              )}
+            </NavLink>
+          )}
         </nav>
 
         {/* Footer */}
         <div className={`py-4 border-t border-zinc-800 flex flex-col gap-2 ${collapsed ? 'px-1 items-center' : 'px-4'}`}>
+          {/* User identity */}
+          {user && (
+            <div className={`flex items-center gap-2.5 mb-1 ${collapsed ? 'justify-center' : ''}`}>
+              <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-semibold text-white">
+                  {user.firstName[0]}{user.lastName[0]}
+                </span>
+              </div>
+              {!collapsed && (
+                <span className="text-xs text-zinc-300 truncate">Hi, {user.firstName}</span>
+              )}
+            </div>
+          )}
+
           {!collapsed && <p className="text-zinc-500 text-xs">FlowDesk v1.0</p>}
 
           <div className={`flex ${collapsed ? 'flex-col gap-2 items-center' : 'items-center justify-between'}`}>
@@ -112,6 +163,15 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse, sp
             >
               <Columns2 className="w-3.5 h-3.5 flex-shrink-0" />
               {!collapsed && 'Split'}
+            </button>
+
+            {/* Logout button */}
+            <button
+              onClick={handleLogout}
+              title="Sign out"
+              className="flex items-center justify-center p-1.5 rounded-lg text-zinc-500 hover:bg-white/10 hover:text-red-400 transition-all"
+            >
+              <LogOut className="w-4 h-4" />
             </button>
 
             {/* Collapse toggle — desktop only */}
