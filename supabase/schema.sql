@@ -148,3 +148,22 @@ CREATE POLICY "allow_all_notes"           ON notes           FOR ALL USING (true
 -- UPDATE daily_tasks     SET user_id = (SELECT id FROM users WHERE username = 'MikeW') WHERE user_id IS NULL;
 -- UPDATE calendar_events SET user_id = (SELECT id FROM users WHERE username = 'MikeW') WHERE user_id IS NULL;
 -- UPDATE notes           SET user_id = (SELECT id FROM users WHERE username = 'MikeW') WHERE user_id IS NULL;
+
+-- ─────────────────────────────────────────
+-- MIGRATION: Calendar/Planner integration
+-- Run BOTH statements in Supabase SQL editor
+-- ─────────────────────────────────────────
+
+-- Step 1: Add completed_date column.
+-- Tracks when a task was actually finished; null means incomplete.
+-- Incomplete tasks auto-roll forward in the app; completed tasks
+-- appear on the calendar on completed_date, not task_date.
+ALTER TABLE daily_tasks ADD COLUMN IF NOT EXISTS completed_date DATE;
+
+-- Step 2: Backfill historical completed tasks.
+-- Any task that was marked complete before this column existed will have
+-- completed_date = NULL and would be invisible on the calendar.
+-- This sets completed_date = created_at::date as the best available approximation.
+UPDATE daily_tasks
+SET completed_date = created_at::date
+WHERE completed = true AND completed_date IS NULL;

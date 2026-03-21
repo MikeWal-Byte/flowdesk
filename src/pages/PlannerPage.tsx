@@ -1,18 +1,42 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { format, parseISO } from 'date-fns'
 import { Plus, Trash2, Check, CheckSquare, Sun, Calendar } from 'lucide-react'
 import Button from '../components/ui/Button'
 import { useAppStore } from '../store/useAppStore'
 
 export default function PlannerPage() {
-  const { dailyTasks, loadingTasks, fetchDailyTasks, createDailyTask, toggleDailyTask, deleteDailyTask } = useAppStore()
+  const {
+    dailyTasks, loadingTasks,
+    fetchDailyTasks, createDailyTask, toggleDailyTask, deleteDailyTask,
+  } = useAppStore()
+
+  const [today, setToday] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [newTask, setNewTask] = useState('')
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const displayDate = format(new Date(), 'EEEE, MMMM d, yyyy')
   const [taskDate, setTaskDate] = useState(today)
   const [showDatePicker, setShowDatePicker] = useState(false)
+  const todayRef = useRef(today)
+  todayRef.current = today
 
-  useEffect(() => { fetchDailyTasks(today) }, [today])
+  // Fetch tasks for the current day whenever `today` changes (initial load + midnight)
+  useEffect(() => {
+    fetchDailyTasks(today)
+  }, [today])
+
+  // Detect midnight date change
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newDate = format(new Date(), 'yyyy-MM-dd')
+      if (newDate !== todayRef.current) setToday(newDate)
+    }, 60_000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Keep taskDate in sync if user hasn't changed it
+  useEffect(() => {
+    setTaskDate(today)
+  }, [today])
+
+  const displayDate = format(parseISO(today), 'EEEE, MMMM d, yyyy')
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()

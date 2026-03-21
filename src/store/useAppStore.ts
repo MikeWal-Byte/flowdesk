@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { format } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from './useAuthStore'
 import type {
@@ -41,9 +42,12 @@ interface AppState {
 
   // ── Daily Planner ──────────────────────────────
   dailyTasks: DailyTask[]
+  allDailyTasks: DailyTask[]
   loadingTasks: boolean
 
   fetchDailyTasks: (date: string) => Promise<void>
+  fetchAllDailyTasks: () => Promise<void>
+  rolloverIncompleteTasks: () => Promise<void>
   createDailyTask: (text: string, date: string) => Promise<void>
   toggleDailyTask: (id: string, completed: boolean) => Promise<void>
   deleteDailyTask: (id: string) => Promise<void>
@@ -162,7 +166,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchCardTodos: async (cardId) => {
     const { data } = await supabase.from('card_todos').select('*').eq('card_id', cardId).order('position')
-    set({ cardTodos: data ?? [] })
+    if (data) set(s => ({
+      cardTodos: [...s.cardTodos.filter(t => t.card_id !== cardId), ...data],
+    }))
   },
 
   createTodo: async (cardId, text) => {
@@ -187,6 +193,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ── Daily Planner ──────────────────────────────
   dailyTasks: [],
+  allDailyTasks: [],
   loadingTasks: false,
 
   fetchDailyTasks: async (date) => {
@@ -201,20 +208,70 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ dailyTasks: data ?? [], loadingTasks: false })
   },
 
+  fetchAllDailyTasks: async () => {
+    const userId = getCurrentUserId()
+    const { data } = await supabase
+      .from('daily_tasks')
+      .select('*')
+      .eq('user_id', userId)
+      .order('task_date')
+    set({ allDailyTasks: data ?? [] })
+  },
+
+  rolloverIncompleteTasks: async () => {
+    const userId = getCurrentUserId()
+    const today = format(new Date(), 'yyyy-MM-dd')
+    // Move all incomplete past tasks to today
+    await supabase
+      .from('daily_tasks')
+      .update({ task_date: today })
+      .eq('user_id', userId)
+      .eq('completed', false)
+      .lt('task_date', today)
+  },
+
   createDailyTask: async (text, date) => {
     const user_id = getCurrentUserId()
-    const { data } = await supabase.from('daily_tasks').insert({ text, task_date: date, user_id }).select().single()
-    if (data) set(s => ({ dailyTasks: [...s.dailyTasks, data] }))
+    const { data, error } = await supabase
+      .from('daily_tasks')
+      .insert({ text, task_date: date, completed_date: null, user_id })
+      .select()
+      .single()
+    if (error) {
+      if (error.code === '42703' || error.message.toLowerCase().includes('completed_date')) {
+        console.error('[FlowDesk] Migration required — daily_tasks is missing the completed_date column.\nRun in Supabase SQL editor: ALTER TABLE daily_tasks ADD COLUMN IF NOT EXISTS completed_date DATE;')
+      } else {
+        console.error('[FlowDesk] Failed to create task:', error.message)
+      }
+      return
+    }
+    if (data) set(s => ({ dailyTasks: [...s.dailyTasks, data], allDailyTasks: [...s.allDailyTasks, data] }))
   },
 
   toggleDailyTask: async (id, completed) => {
-    await supabase.from('daily_tasks').update({ completed }).eq('id', id)
-    set(s => ({ dailyTasks: s.dailyTasks.map(t => t.id === id ? { ...t, completed } : t) }))
+    const completed_date = completed ? format(new Date(), 'yyyy-MM-dd') : null
+    const { error } = await supabase.from('daily_tasks').update({ completed, completed_date }).eq('id', id)
+    if (error) {
+      if (error.code === '42703' || error.message.toLowerCase().includes('completed_date')) {
+        console.error('[FlowDesk] Migration required — daily_tasks is missing the completed_date column.\nRun in Supabase SQL editor: ALTER TABLE daily_tasks ADD COLUMN IF NOT EXISTS completed_date DATE;')
+      } else {
+        console.error('[FlowDesk] Failed to toggle task:', error.message)
+      }
+      return
+    }
+    const patch = (t: DailyTask) => t.id === id ? { ...t, completed, completed_date } : t
+    set(s => ({
+      dailyTasks: s.dailyTasks.map(patch),
+      allDailyTasks: s.allDailyTasks.map(patch),
+    }))
   },
 
   deleteDailyTask: async (id) => {
     await supabase.from('daily_tasks').delete().eq('id', id)
-    set(s => ({ dailyTasks: s.dailyTasks.filter(t => t.id !== id) }))
+    set(s => ({
+      dailyTasks: s.dailyTasks.filter(t => t.id !== id),
+      allDailyTasks: s.allDailyTasks.filter(t => t.id !== id),
+    }))
   },
 
   // ── Calendar ───────────────────────────────────
@@ -297,7 +354,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Auth helpers ───────────────────────────────
   clearData: () => set({
     projects: [], projectCards: [], cardTodos: [],
-    dailyTasks: [], calendarEvents: [], notes: [],
+    dailyTasks: [], allDailyTasks: [], calendarEvents: [], notes: [],
     activeProjectId: null, activeNoteId: null,
   }),
 }))

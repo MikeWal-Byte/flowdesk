@@ -1,13 +1,35 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
+import { format } from 'date-fns'
 import { Menu } from 'lucide-react'
 import Sidebar from './Sidebar'
 import BottomNav from './BottomNav'
 import SecondaryPanel from './SecondaryPanel'
+import { useAppStore } from '../../store/useAppStore'
 
 type SecondaryView = 'planner' | 'calendar' | 'notes'
 
 export default function Layout() {
+  const { rolloverIncompleteTasks, fetchAllDailyTasks } = useAppStore()
+  const todayRef = useRef(format(new Date(), 'yyyy-MM-dd'))
+
+  // Run rollover once on mount (fires regardless of which page loads first)
+  useEffect(() => {
+    rolloverIncompleteTasks().then(() => fetchAllDailyTasks())
+  }, [])
+
+  // Midnight detection — re-run rollover when the calendar date flips
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newDate = format(new Date(), 'yyyy-MM-dd')
+      if (newDate !== todayRef.current) {
+        todayRef.current = newDate
+        rolloverIncompleteTasks().then(() => fetchAllDailyTasks())
+      }
+    }, 60_000)
+    return () => clearInterval(interval)
+  }, [])
+
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [secondaryView, setSecondaryView] = useState<SecondaryView | null>(null)

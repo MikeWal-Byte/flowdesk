@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -23,7 +23,7 @@ interface Props {
 }
 
 export default function KanbanBoard({ projectId }: Props) {
-  const { projectCards, moveCard, reorderCards } = useAppStore()
+  const { projectCards, moveCard, reorderCards, fetchCardTodos } = useAppStore()
   const [activeCard, setActiveCard] = useState<ProjectCard | null>(null)
   const [detailCard, setDetailCard] = useState<ProjectCard | null>(null)
 
@@ -33,6 +33,12 @@ export default function KanbanBoard({ projectId }: Props) {
   )
 
   const cards = projectCards.filter(c => c.project_id === projectId)
+
+  // Pre-fetch todos for all visible cards so they render inline
+  const cardIds = cards.map(c => c.id).sort().join(',')
+  useEffect(() => {
+    cards.forEach(card => fetchCardTodos(card.id))
+  }, [cardIds])
 
   const getColumnCards = (colId: ColumnId) =>
     cards.filter(c => c.column_id === colId).sort((a, b) => a.position - b.position)

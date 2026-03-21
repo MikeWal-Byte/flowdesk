@@ -4,17 +4,20 @@ import {
   eachDayOfInterval, addMonths, subMonths, addWeeks, subWeeks,
   addDays, subDays, isSameDay, isSameMonth, isToday, parseISO,
 } from 'date-fns'
-import { ChevronLeft, ChevronRight, Plus, X, CalendarDays } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, CalendarDays, Check } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import { useAppStore } from '../store/useAppStore'
-import type { CalendarEvent } from '../types'
+import type { CalendarEvent, DailyTask } from '../types'
 import { PROJECT_COLORS } from '../types'
 
 type ViewMode = 'month' | 'week' | 'day'
 
 export default function CalendarPage() {
-  const { calendarEvents, fetchCalendarEvents, createCalendarEvent, deleteCalendarEvent } = useAppStore()
+  const {
+    calendarEvents, fetchCalendarEvents, createCalendarEvent, deleteCalendarEvent,
+    allDailyTasks, fetchAllDailyTasks,
+  } = useAppStore()
   const [viewMode, setViewMode] = useState<ViewMode>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -24,10 +27,21 @@ export default function CalendarPage() {
   const [newEventNotes, setNewEventNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => { fetchCalendarEvents() }, [])
+  useEffect(() => {
+    fetchCalendarEvents()
+    fetchAllDailyTasks()
+  }, [])
 
   const eventsForDate = (date: Date) =>
     calendarEvents.filter(e => isSameDay(parseISO(e.event_date), date))
+
+  // Incomplete tasks show on their scheduled date; completed tasks on their completion date
+  const tasksForDate = (date: Date) => {
+    const dateStr = format(date, 'yyyy-MM-dd')
+    const incomplete = allDailyTasks.filter(t => !t.completed && t.task_date === dateStr)
+    const completed = allDailyTasks.filter(t => t.completed && t.completed_date === dateStr)
+    return { incomplete, completed }
+  }
 
   // Navigation
   const navigate = (dir: 1 | -1) => {
@@ -88,7 +102,6 @@ export default function CalendarPage() {
 
   const EventDot = ({ event }: { event: CalendarEvent }) => (
     <div
-      key={event.id}
       className="text-white text-xs px-1.5 py-0.5 rounded-md truncate font-medium flex items-center justify-between group"
       style={{ backgroundColor: event.color }}
     >
@@ -101,6 +114,45 @@ export default function CalendarPage() {
       </button>
     </div>
   )
+
+  const TaskDot = ({ task, completed }: { task: DailyTask; completed: boolean }) => (
+    <div className={`text-xs px-1.5 py-0.5 rounded-md truncate flex items-center gap-1
+      ${completed ? 'bg-gray-100' : 'bg-slate-100'}`}
+    >
+      {completed
+        ? <Check className="w-2.5 h-2.5 flex-shrink-0 text-emerald-500" />
+        : <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0" />
+      }
+      <span className={`truncate ${completed ? 'text-gray-400 line-through' : 'text-slate-700'}`}>
+        {task.text}
+      </span>
+    </div>
+  )
+
+  // Renders events + tasks for a cell, capped at maxItems total
+  const CellItems = ({ date, maxItems = 3 }: { date: Date; maxItems?: number }) => {
+    const events = eventsForDate(date)
+    const { incomplete, completed } = tasksForDate(date)
+    const allItems = [
+      ...events.map(e => ({ type: 'event' as const, item: e })),
+      ...incomplete.map(t => ({ type: 'task-pending' as const, item: t })),
+      ...completed.map(t => ({ type: 'task-done' as const, item: t })),
+    ]
+    const visible = allItems.slice(0, maxItems)
+    const overflow = allItems.length - visible.length
+    return (
+      <div className="space-y-0.5">
+        {visible.map((entry) => {
+          if (entry.type === 'event') return <EventDot key={entry.item.id} event={entry.item as CalendarEvent} />
+          if (entry.type === 'task-pending') return <TaskDot key={entry.item.id} task={entry.item as DailyTask} completed={false} />
+          return <TaskDot key={entry.item.id} task={entry.item as DailyTask} completed={true} />
+        })}
+        {overflow > 0 && (
+          <p className="text-xs text-gray-400 pl-1">+{overflow} more</p>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -148,7 +200,6 @@ export default function CalendarPage() {
         {/* Month view */}
         {viewMode === 'month' && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden h-full flex flex-col">
-            {/* Day name headers */}
             <div className="grid grid-cols-7 border-b border-gray-100">
               {DAY_NAMES.map(d => (
                 <div key={d} className="py-3 text-xs font-semibold text-gray-500 text-center uppercase tracking-wide">
@@ -156,10 +207,8 @@ export default function CalendarPage() {
                 </div>
               ))}
             </div>
-            {/* Day cells */}
             <div className="grid grid-cols-7 flex-1">
               {monthDays().map((day, i) => {
-                const events = eventsForDate(day)
                 const isCurrentMonth = isSameMonth(day, currentDate)
                 return (
                   <div
@@ -174,12 +223,7 @@ export default function CalendarPage() {
                       ${isToday(day) ? 'bg-blue-700 text-white' : isCurrentMonth ? 'text-gray-800' : 'text-gray-400'}`}>
                       {format(day, 'd')}
                     </span>
-                    <div className="space-y-0.5">
-                      {events.slice(0, 3).map(ev => <EventDot key={ev.id} event={ev} />)}
-                      {events.length > 3 && (
-                        <p className="text-xs text-gray-400 pl-1">+{events.length - 3} more</p>
-                      )}
-                    </div>
+                    <CellItems date={day} maxItems={3} />
                   </div>
                 )
               })}
@@ -205,9 +249,7 @@ export default function CalendarPage() {
                       {format(day, 'd')}
                     </span>
                   </div>
-                  <div className="space-y-1">
-                    {eventsForDate(day).map(ev => <EventDot key={ev.id} event={ev} />)}
-                  </div>
+                  <CellItems date={day} maxItems={10} />
                 </div>
               ))}
             </div>
@@ -227,11 +269,12 @@ export default function CalendarPage() {
                   <Plus className="w-3.5 h-3.5" /> Add event
                 </Button>
               </div>
-              <div className="space-y-2">
-                {eventsForDate(currentDate).length === 0 ? (
-                  <p className="text-gray-400 text-sm text-center py-8">No events today. Click + to add one.</p>
-                ) : (
-                  eventsForDate(currentDate).map(ev => (
+
+              {/* Events */}
+              {eventsForDate(currentDate).length > 0 && (
+                <div className="space-y-2 mb-4">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Events</p>
+                  {eventsForDate(currentDate).map(ev => (
                     <div
                       key={ev.id}
                       className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 group"
@@ -248,9 +291,40 @@ export default function CalendarPage() {
                         <Trash2Icon className="w-4 h-4" />
                       </button>
                     </div>
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Tasks */}
+              {(() => {
+                const { incomplete, completed } = tasksForDate(currentDate)
+                const hasTasks = incomplete.length > 0 || completed.length > 0
+                if (!hasTasks) return null
+                return (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Tasks</p>
+                    {incomplete.map(task => (
+                      <div key={task.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50">
+                        <div className="w-2 h-2 rounded-full bg-slate-400 flex-shrink-0" />
+                        <span className="text-sm text-slate-700">{task.text}</span>
+                      </div>
+                    ))}
+                    {completed.map(task => (
+                      <div key={task.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50 opacity-70">
+                        <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                        <span className="text-sm text-gray-400 line-through">{task.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+
+              {eventsForDate(currentDate).length === 0 && (() => {
+                const { incomplete, completed } = tasksForDate(currentDate)
+                return incomplete.length === 0 && completed.length === 0
+              })() && (
+                <p className="text-gray-400 text-sm text-center py-8">No events or tasks. Click + to add one.</p>
+              )}
             </div>
           </div>
         )}

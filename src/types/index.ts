@@ -47,7 +47,8 @@ export interface DailyTask {
   id: string
   text: string
   completed: boolean
-  task_date: string
+  task_date: string        // scheduled date (rolls forward if missed)
+  completed_date: string | null  // actual date marked done; null if incomplete
   created_at: string
   user_id?: string | null
 }
@@ -84,9 +85,9 @@ export const COLUMNS: { id: ColumnId; label: string; color: string; bg: string }
 ]
 
 export const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: string; text: string }> = {
-  1: { label: 'P1', color: '#10b981', bg: 'bg-emerald-100', text: 'text-emerald-700' },
+  1: { label: 'P1', color: '#ef4444', bg: 'bg-red-100',     text: 'text-red-700' },
   2: { label: 'P2', color: '#f59e0b', bg: 'bg-amber-100',   text: 'text-amber-700' },
-  3: { label: 'P3', color: '#ef4444', bg: 'bg-red-100',     text: 'text-red-700' },
+  3: { label: 'P3', color: '#10b981', bg: 'bg-emerald-100', text: 'text-emerald-700' },
 }
 
 export const PROJECT_COLORS = [
