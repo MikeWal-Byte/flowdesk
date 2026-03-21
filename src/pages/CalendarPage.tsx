@@ -21,7 +21,8 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-  const [showAddModal, setShowAddModal] = useState(false)
+  const [showDayModal, setShowDayModal] = useState(false)
+  const [showAddForm, setShowAddForm] = useState(false)
   const [newEventTitle, setNewEventTitle] = useState('')
   const [newEventColor, setNewEventColor] = useState(PROJECT_COLORS[0])
   const [newEventNotes, setNewEventNotes] = useState('')
@@ -52,7 +53,16 @@ export default function CalendarPage() {
 
   const handleDayClick = (date: Date) => {
     setSelectedDate(date)
-    setShowAddModal(true)
+    setShowDayModal(true)
+    setShowAddForm(false)
+    setNewEventTitle('')
+    setNewEventNotes('')
+    setNewEventColor(PROJECT_COLORS[0])
+  }
+
+  const handleCloseDayModal = () => {
+    setShowDayModal(false)
+    setShowAddForm(false)
   }
 
   const handleAddEvent = async (e: React.FormEvent) => {
@@ -72,7 +82,7 @@ export default function CalendarPage() {
     setNewEventTitle('')
     setNewEventNotes('')
     setNewEventColor(PROJECT_COLORS[0])
-    setShowAddModal(false)
+    setShowAddForm(false)
   }
 
   const headerLabel = () => {
@@ -330,50 +340,130 @@ export default function CalendarPage() {
         )}
       </div>
 
-      {/* Add event modal */}
-      <Modal open={showAddModal} onClose={() => setShowAddModal(false)} title={`Add Event — ${selectedDate ? format(selectedDate, 'MMM d, yyyy') : ''}`}>
-        <form onSubmit={handleAddEvent} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Event Title</label>
-            <input
-              autoFocus
-              value={newEventTitle}
-              onChange={e => setNewEventTitle(e.target.value)}
-              placeholder="e.g. Team meeting"
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
-            <textarea
-              value={newEventNotes}
-              onChange={e => setNewEventNotes(e.target.value)}
-              rows={2}
-              placeholder="Any notes about this event…"
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Colour</label>
-            <div className="flex gap-2 flex-wrap">
-              {PROJECT_COLORS.map(c => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setNewEventColor(c)}
-                  className={`w-7 h-7 rounded-full transition-transform hover:scale-110 ${newEventColor === c ? 'ring-2 ring-offset-2 ring-gray-400 scale-110' : ''}`}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setShowAddModal(false)}>Cancel</Button>
-            <Button type="submit" disabled={saving || !newEventTitle.trim()}>
-              {saving ? 'Saving…' : 'Add Event'}
-            </Button>
-          </div>
-        </form>
+      {/* Day detail modal — shows tasks + events, with inline add-event form */}
+      <Modal
+        open={showDayModal}
+        onClose={handleCloseDayModal}
+        title={selectedDate ? format(selectedDate, 'EEEE, MMMM d, yyyy') : ''}
+      >
+        <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+          {selectedDate && (() => {
+            const events = eventsForDate(selectedDate)
+            const { incomplete, completed } = tasksForDate(selectedDate)
+            const hasAnything = events.length > 0 || incomplete.length > 0 || completed.length > 0
+
+            return (
+              <>
+                {/* Calendar events */}
+                {events.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Events</p>
+                    <div className="space-y-2">
+                      {events.map(ev => (
+                        <div
+                          key={ev.id}
+                          className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 group"
+                          style={{ borderLeftColor: ev.color, borderLeftWidth: 4 }}
+                        >
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900 text-sm">{ev.title}</p>
+                            {ev.notes && <p className="text-xs text-gray-500 mt-0.5">{ev.notes}</p>}
+                          </div>
+                          <button
+                            onClick={() => deleteCalendarEvent(ev.id)}
+                            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all"
+                          >
+                            <Trash2Icon className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Incomplete tasks scheduled for this day */}
+                {incomplete.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Scheduled Tasks</p>
+                    <div className="space-y-1.5">
+                      {incomplete.map(task => (
+                        <div key={task.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50">
+                          <div className="w-2 h-2 rounded-full bg-slate-400 flex-shrink-0" />
+                          <span className="text-sm text-slate-700">{task.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Completed tasks ticked off on this day */}
+                {completed.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Completed Tasks</p>
+                    <div className="space-y-1.5">
+                      {completed.map(task => (
+                        <div key={task.id} className="flex items-center gap-3 p-3 rounded-xl border border-emerald-100 bg-emerald-50">
+                          <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                          <span className="text-sm text-gray-500 line-through">{task.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!hasAnything && !showAddForm && (
+                  <p className="text-gray-400 text-sm text-center py-4">Nothing scheduled for this day.</p>
+                )}
+
+                {/* Add event form (toggled) */}
+                {showAddForm ? (
+                  <div className="border-t border-gray-100 pt-4">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">New Event</p>
+                    <form onSubmit={handleAddEvent} className="space-y-3">
+                      <input
+                        autoFocus
+                        value={newEventTitle}
+                        onChange={e => setNewEventTitle(e.target.value)}
+                        placeholder="Event title"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                      />
+                      <textarea
+                        value={newEventNotes}
+                        onChange={e => setNewEventNotes(e.target.value)}
+                        rows={2}
+                        placeholder="Notes (optional)"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
+                      />
+                      <div className="flex gap-2 flex-wrap">
+                        {PROJECT_COLORS.map(c => (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => setNewEventColor(c)}
+                            className={`w-7 h-7 rounded-full transition-transform hover:scale-110 ${newEventColor === c ? 'ring-2 ring-offset-2 ring-gray-400 scale-110' : ''}`}
+                            style={{ backgroundColor: c }}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" variant="secondary" onClick={() => setShowAddForm(false)}>Cancel</Button>
+                        <Button type="submit" disabled={saving || !newEventTitle.trim()}>
+                          {saving ? 'Saving…' : 'Add Event'}
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
+                ) : (
+                  <div className={hasAnything ? 'border-t border-gray-100 pt-4' : ''}>
+                    <Button size="sm" onClick={() => setShowAddForm(true)}>
+                      <Plus className="w-3.5 h-3.5" /> Add Event
+                    </Button>
+                  </div>
+                )}
+              </>
+            )
+          })()}
+        </div>
       </Modal>
     </div>
   )

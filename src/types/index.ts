@@ -15,6 +15,9 @@ export interface Project {
   title: string
   description: string | null
   color: string
+  column_id: ColumnId   // which board column this project sits in
+  priority: Priority    // P1 red / P2 amber / P3 green
+  position: number      // sort order within its column
   created_at: string
   updated_at: string
   user_id?: string | null

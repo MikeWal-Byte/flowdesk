@@ -167,3 +167,18 @@ ALTER TABLE daily_tasks ADD COLUMN IF NOT EXISTS completed_date DATE;
 UPDATE daily_tasks
 SET completed_date = created_at::date
 WHERE completed = true AND completed_date IS NULL;
+
+-- ─────────────────────────────────────────
+-- MIGRATION: Projects as kanban board cards
+-- Run ALL THREE statements in Supabase SQL editor
+-- ─────────────────────────────────────────
+
+-- Add board positioning fields to projects so each project can sit
+-- in a column and be dragged between statuses.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS column_id TEXT DEFAULT 'not-started'
+  CHECK (column_id IN ('not-started', 'in-progress', 'completed', 'on-hold'));
+
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 2
+  CHECK (priority IN (1, 2, 3));
+
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0;

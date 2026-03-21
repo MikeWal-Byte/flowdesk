@@ -29,11 +29,15 @@ interface AppState {
   setActiveProject: (id: string | null) => void
 
   fetchProjectCards: (projectId: string) => Promise<void>
+  fetchAllProjectCards: () => Promise<void>
   createCard: (projectId: string, title: string, description: string, dueDate: string | null, priority: Priority, column: ColumnId) => Promise<void>
   updateCard: (id: string, updates: Partial<ProjectCard>) => Promise<void>
   moveCard: (cardId: string, newColumn: ColumnId, newPosition: number) => Promise<void>
+  moveProject: (projectId: string, newColumn: ColumnId, newPosition: number) => Promise<void>
+  saveColumnOrder: (updates: Array<{ id: string; position: number }>) => Promise<void>
   deleteCard: (id: string) => Promise<void>
   reorderCards: (cards: ProjectCard[]) => void
+  reorderProjects: (projects: Project[]) => void
 
   fetchCardTodos: (cardId: string) => Promise<void>
   createTodo: (cardId: string, text: string) => Promise<void>
@@ -96,7 +100,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   createProject: async (title, description, color) => {
     const user_id = getCurrentUserId()
-    const { data } = await supabase.from('projects').insert({ title, description, color, user_id }).select().single()
+    const position = get().projects.filter(p => p.column_id === 'not-started').length
+    const { data, error } = await supabase
+      .from('projects')
+      .insert({ title, description, color, user_id, column_id: 'not-started', priority: 2, position })
+      .select()
+      .single()
+    if (error) {
+      if (error.code === '42703' || error.message.toLowerCase().includes('column_id') || error.message.toLowerCase().includes('priority') || error.message.toLowerCase().includes('position')) {
+        console.error('[FlowDesk] Migration required — projects table is missing board columns.\nRun in Supabase SQL editor:\n  ALTER TABLE projects ADD COLUMN IF NOT EXISTS column_id TEXT DEFAULT \'not-started\' CHECK (column_id IN (\'not-started\', \'in-progress\', \'completed\', \'on-hold\'));\n  ALTER TABLE projects ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 2 CHECK (priority IN (1, 2, 3));\n  ALTER TABLE projects ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0;')
+      } else {
+        console.error('[FlowDesk] Failed to create project:', error.message)
+      }
+      return
+    }
     if (data) set(s => ({ projects: [data, ...s.projects] }))
   },
 
@@ -110,6 +127,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set(s => ({
       projects: s.projects.filter(p => p.id !== id),
       activeProjectId: s.activeProjectId === id ? null : s.activeProjectId,
+      projectCards: s.projectCards.filter(c => c.project_id !== id),
     }))
   },
 
@@ -122,6 +140,39 @@ export const useAppStore = create<AppState>((set, get) => ({
       .eq('project_id', projectId)
       .order('position')
     set({ projectCards: data ?? [] })
+  },
+
+  fetchAllProjectCards: async () => {
+    const projectIds = get().projects.map(p => p.id)
+    if (projectIds.length === 0) { set({ projectCards: [] }); return }
+    const { data } = await supabase
+      .from('project_cards')
+      .select('*')
+      .in('project_id', projectIds)
+      .order('position')
+    set({ projectCards: data ?? [] })
+  },
+
+  moveProject: async (projectId, newColumn, newPosition) => {
+    set(s => ({
+      projects: s.projects.map(p =>
+        p.id === projectId ? { ...p, column_id: newColumn, position: newPosition } : p
+      ),
+    }))
+    await supabase
+      .from('projects')
+      .update({ column_id: newColumn, position: newPosition, updated_at: new Date().toISOString() })
+      .eq('id', projectId)
+  },
+
+  reorderProjects: (projects) => set({ projects }),
+
+  saveColumnOrder: async (updates) => {
+    await Promise.all(
+      updates.map(({ id, position }) =>
+        supabase.from('projects').update({ position }).eq('id', id)
+      )
+    )
   },
 
   createCard: async (projectId, title, description, dueDate, priority, column) => {
