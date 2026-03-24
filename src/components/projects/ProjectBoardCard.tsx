@@ -3,7 +3,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, Trash2, Flag, Check, Plus, ChevronDown, ChevronRight } from 'lucide-react'
 import Badge from '../ui/Badge'
-import type { Project } from '../../types'
+import type { Project, Priority } from '../../types'
 import { PRIORITY_CONFIG } from '../../types'
 import { useAppStore } from '../../store/useAppStore'
 
@@ -21,7 +21,7 @@ export default function ProjectBoardCard({ project }: Props) {
     isDragging,
   } = useSortable({ id: project.id })
 
-  const { projectCards, deleteProject, updateCard, createCard } = useAppStore()
+  const { projectCards, deleteProject, updateProject, updateCard, createCard } = useAppStore()
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [checklistOpen, setChecklistOpen] = useState(true)
   const [newTask, setNewTask] = useState('')
@@ -112,12 +112,20 @@ export default function ProjectBoardCard({ project }: Props) {
           </div>
         )}
 
-        {/* Priority badge */}
+        {/* Priority badge — click to cycle P1 → P2 → P3 → P1 */}
         <div className="mb-3">
-          <Badge className={`${pConfig.bg} ${pConfig.text}`}>
-            <Flag className="w-2.5 h-2.5 mr-0.5" />
-            {pConfig.label}
-          </Badge>
+          <button
+            type="button"
+            title={`Priority: ${pConfig.label} (${pConfig.hint}) — click to change`}
+            onClick={() => {
+              const next: Priority = project.priority === 1 ? 2 : project.priority === 2 ? 3 : 1
+              updateProject(project.id, { priority: next })
+            }}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold transition-all hover:opacity-80 active:scale-95 ${pConfig.bg} ${pConfig.text}`}
+          >
+            <Flag className="w-2.5 h-2.5" />
+            {pConfig.label} · {pConfig.hint}
+          </button>
         </div>
 
         {/* Checklist — project_cards as task items */}

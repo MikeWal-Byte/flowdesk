@@ -2,7 +2,8 @@ import { useState } from 'react'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import { useAppStore } from '../../store/useAppStore'
-import { PROJECT_COLORS } from '../../types'
+import type { Priority } from '../../types'
+import { PROJECT_COLORS, PRIORITY_CONFIG } from '../../types'
 
 interface Props {
   open: boolean
@@ -14,17 +15,19 @@ export default function CreateProjectModal({ open, onClose }: Props) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [color, setColor] = useState(PROJECT_COLORS[0])
+  const [priority, setPriority] = useState<Priority>(2)
   const [saving, setSaving] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
     setSaving(true)
-    await createProject(title.trim(), description.trim(), color)
+    await createProject(title.trim(), description.trim(), color, priority)
     setSaving(false)
     setTitle('')
     setDescription('')
     setColor(PROJECT_COLORS[0])
+    setPriority(2)
     onClose()
   }
 
@@ -50,6 +53,28 @@ export default function CreateProjectModal({ open, onClose }: Props) {
             rows={3}
             className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
           />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+          <div className="flex gap-2">
+            {([1, 2, 3] as Priority[]).map(p => {
+              const cfg = PRIORITY_CONFIG[p]
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPriority(p)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-semibold border-2 transition-all
+                    ${priority === p
+                      ? `${cfg.bg} ${cfg.text} border-current`
+                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                >
+                  {cfg.label} — {cfg.hint}
+                </button>
+              )
+            })}
+          </div>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Colour</label>

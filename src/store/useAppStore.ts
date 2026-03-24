@@ -23,7 +23,7 @@ interface AppState {
   loadingProjects: boolean
 
   fetchProjects: () => Promise<void>
-  createProject: (title: string, description: string, color: string) => Promise<void>
+  createProject: (title: string, description: string, color: string, priority?: Priority) => Promise<void>
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>
   deleteProject: (id: string) => Promise<void>
   setActiveProject: (id: string | null) => void
@@ -98,12 +98,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ projects: data ?? [], loadingProjects: false })
   },
 
-  createProject: async (title, description, color) => {
+  createProject: async (title, description, color, priority = 2) => {
     const user_id = getCurrentUserId()
     const position = get().projects.filter(p => p.column_id === 'not-started').length
     const { data, error } = await supabase
       .from('projects')
-      .insert({ title, description, color, user_id, column_id: 'not-started', priority: 2, position })
+      .insert({ title, description, color, user_id, column_id: 'not-started', priority, position })
       .select()
       .single()
     if (error) {

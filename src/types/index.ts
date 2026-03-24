@@ -87,10 +87,10 @@ export const COLUMNS: { id: ColumnId; label: string; color: string; bg: string }
   { id: 'on-hold',     label: 'On Hold',     color: '#f59e0b', bg: 'bg-amber-50' },
 ]
 
-export const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: string; text: string }> = {
-  1: { label: 'P1', color: '#ef4444', bg: 'bg-red-100',     text: 'text-red-700' },
-  2: { label: 'P2', color: '#f59e0b', bg: 'bg-amber-100',   text: 'text-amber-700' },
-  3: { label: 'P3', color: '#10b981', bg: 'bg-emerald-100', text: 'text-emerald-700' },
+export const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: string; text: string; hint: string }> = {
+  1: { label: 'P1', color: '#ef4444', bg: 'bg-red-100',    text: 'text-red-700',    hint: 'Highest' },
+  2: { label: 'P2', color: '#f97316', bg: 'bg-orange-100', text: 'text-orange-700', hint: 'Medium'  },
+  3: { label: 'P3', color: '#10b981', bg: 'bg-emerald-100',text: 'text-emerald-700',hint: 'Lowest'  },
 }
 
 export const PROJECT_COLORS = [
