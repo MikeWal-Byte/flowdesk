@@ -291,7 +291,7 @@ export default function PlannerPage() {
               <p className="text-gray-400 text-sm">Add something to get started</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 overflow-y-auto">
               {/* Incomplete tasks */}
               {dailyTasks.filter(t => !t.completed).map(task => (
                 <div

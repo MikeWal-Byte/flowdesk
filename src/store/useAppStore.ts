@@ -283,38 +283,56 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   createDailyTask: async (text, date) => {
     const user_id = getCurrentUserId()
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('daily_tasks')
       .insert({ text, task_date: date, completed_date: null, user_id })
       .select()
       .single()
     if (error) {
       if (error.code === '42703' || error.message.toLowerCase().includes('completed_date')) {
-        console.error('[FlowDesk] Migration required — daily_tasks is missing the completed_date column.\nRun in Supabase SQL editor: ALTER TABLE daily_tasks ADD COLUMN IF NOT EXISTS completed_date DATE;')
-      } else {
-        console.error('[FlowDesk] Failed to create task:', error.message)
+        // completed_date column doesn't exist yet — retry without it
+        const result = await supabase
+          .from('daily_tasks')
+          .insert({ text, task_date: date, user_id })
+          .select()
+          .single()
+        data = result.data
+        error = result.error
       }
-      return
+      if (error) {
+        console.error('[FlowDesk] Failed to create task:', error.message)
+        return
+      }
     }
-    if (data) set(s => ({ dailyTasks: [...s.dailyTasks, data], allDailyTasks: [...s.allDailyTasks, data] }))
+    if (data) set(s => ({ dailyTasks: [...s.dailyTasks, data!], allDailyTasks: [...s.allDailyTasks, data!] }))
   },
 
   toggleDailyTask: async (id, completed) => {
     const completed_date = completed ? format(new Date(), 'yyyy-MM-dd') : null
-    const { error } = await supabase.from('daily_tasks').update({ completed, completed_date }).eq('id', id)
-    if (error) {
-      if (error.code === '42703' || error.message.toLowerCase().includes('completed_date')) {
-        console.error('[FlowDesk] Migration required — daily_tasks is missing the completed_date column.\nRun in Supabase SQL editor: ALTER TABLE daily_tasks ADD COLUMN IF NOT EXISTS completed_date DATE;')
-      } else {
-        console.error('[FlowDesk] Failed to toggle task:', error.message)
-      }
-      return
-    }
+    // Optimistic update so the UI responds immediately
     const patch = (t: DailyTask) => t.id === id ? { ...t, completed, completed_date } : t
     set(s => ({
       dailyTasks: s.dailyTasks.map(patch),
       allDailyTasks: s.allDailyTasks.map(patch),
     }))
+    const { error } = await supabase.from('daily_tasks').update({ completed, completed_date }).eq('id', id)
+    if (error) {
+      if (error.code === '42703' || error.message.toLowerCase().includes('completed_date')) {
+        // completed_date column doesn't exist yet — retry with just the completed flag
+        const { error: error2 } = await supabase.from('daily_tasks').update({ completed }).eq('id', id)
+        if (error2) {
+          console.error('[FlowDesk] Failed to toggle task:', error2.message)
+          // Revert optimistic update
+          const revert = (t: DailyTask) => t.id === id ? { ...t, completed: !completed, completed_date: null } : t
+          set(s => ({ dailyTasks: s.dailyTasks.map(revert), allDailyTasks: s.allDailyTasks.map(revert) }))
+        }
+      } else {
+        console.error('[FlowDesk] Failed to toggle task:', error.message)
+        // Revert optimistic update
+        const revert = (t: DailyTask) => t.id === id ? { ...t, completed: !completed, completed_date: null } : t
+        set(s => ({ dailyTasks: s.dailyTasks.map(revert), allDailyTasks: s.allDailyTasks.map(revert) }))
+      }
+    }
   },
 
   deleteDailyTask: async (id) => {
