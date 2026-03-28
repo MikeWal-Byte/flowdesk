@@ -1,131 +1,57 @@
 import { useEffect, useState } from 'react'
-import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  type DragStartEvent,
-  type DragEndEvent,
-  type DragOverEvent,
-} from '@dnd-kit/core'
-import { arrayMove } from '@dnd-kit/sortable'
-import { Plus, LayoutDashboard, GripVertical } from 'lucide-react'
-import ProjectBoardColumn from '../components/projects/ProjectBoardColumn'
+import { Plus, LayoutDashboard, Trash2, Flag, ChevronRight } from 'lucide-react'
+import KanbanBoard from '../components/projects/KanbanBoard'
 import CreateProjectModal from '../components/projects/CreateProjectModal'
 import Button from '../components/ui/Button'
 import { useAppStore } from '../store/useAppStore'
-import type { Project, ColumnId } from '../types'
-import { COLUMNS } from '../types'
+import type { Priority } from '../types'
+import { PRIORITY_CONFIG } from '../types'
 
 export default function ProjectsPage() {
   const {
     projects, loadingProjects, fetchProjects,
-    fetchAllProjectCards, moveProject, reorderProjects, saveColumnOrder,
+    fetchProjectCards, deleteProject, updateProject,
   } = useAppStore()
 
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [activeProject, setActiveProject] = useState<Project | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
-  )
-
-  // Fetch projects, then all their cards
+  // Load projects on mount
   useEffect(() => {
-    fetchProjects().then(() => fetchAllProjectCards())
+    fetchProjects()
   }, [])
 
-  // Re-fetch cards whenever the project list changes (new project added)
-  const projectIds = projects.map(p => p.id).sort().join(',')
+  // Auto-select first project when list loads
   useEffect(() => {
-    if (projects.length > 0) fetchAllProjectCards()
-  }, [projectIds])
+    if (!selectedId && projects.length > 0) {
+      const first = projects[0]
+      setSelectedId(first.id)
+      fetchProjectCards(first.id)
+    }
+  }, [projects.length])
 
-  const getColumnProjects = (colId: ColumnId) =>
-    projects
-      .filter(p => (p.column_id ?? 'not-started') === colId)
-      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const project = projects.find(p => p.id === event.active.id)
-    if (project) setActiveProject(project)
+  const handleSelectProject = (id: string) => {
+    setSelectedId(id)
+    fetchProjectCards(id)
+    setDeleteConfirm(null)
   }
 
-  const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event
-    if (!over) return
-
-    const activeId = active.id as string
-    const overId = over.id as string
-    const dragging = projects.find(p => p.id === activeId)
-    if (!dragging) return
-
-    // Dropped over a column
-    const overColumn = COLUMNS.find(c => c.id === overId)
-    if (overColumn && dragging.column_id !== overColumn.id) {
-      reorderProjects(projects.map(p =>
-        p.id === activeId ? { ...p, column_id: overColumn.id as ColumnId } : p
-      ))
-      return
-    }
-
-    // Dropped over another project card
-    const overProject = projects.find(p => p.id === overId)
-    if (!overProject) return
-    if (dragging.column_id !== overProject.column_id) {
-      reorderProjects(projects.map(p =>
-        p.id === activeId ? { ...p, column_id: overProject.column_id } : p
-      ))
+  const handleDelete = async (id: string) => {
+    await deleteProject(id)
+    setDeleteConfirm(null)
+    if (selectedId === id) {
+      const remaining = projects.filter(p => p.id !== id)
+      if (remaining.length > 0) {
+        setSelectedId(remaining[0].id)
+        fetchProjectCards(remaining[0].id)
+      } else {
+        setSelectedId(null)
+      }
     }
   }
 
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event
-    setActiveProject(null)
-    if (!over) return
-
-    // Read fresh state directly from Zustand — avoids stale closure from handleDragOver optimistic updates
-    const freshProjects = useAppStore.getState().projects
-
-    const activeId = active.id as string
-    const overId = over.id as string
-    const dragging = freshProjects.find(p => p.id === activeId)
-    if (!dragging) return
-
-    const overColumn = COLUMNS.find(c => c.id === overId)
-    const overProject = freshProjects.find(p => p.id === overId)
-    const targetColumn = (overColumn?.id ?? overProject?.column_id ?? dragging.column_id) as ColumnId
-
-    const colProjects = freshProjects
-      .filter(p => p.column_id === targetColumn)
-      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-
-    const oldIndex = colProjects.findIndex(p => p.id === activeId)
-    const newIndex = overProject ? colProjects.findIndex(p => p.id === overId) : colProjects.length
-
-    let reordered = colProjects
-    if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-      reordered = arrayMove(colProjects, oldIndex, newIndex)
-    } else if (oldIndex === -1) {
-      // Item wasn't in target column yet (shouldn't happen after handleDragOver, but guard anyway)
-      reordered = [...colProjects, { ...dragging, column_id: targetColumn }]
-    }
-
-    const finalPosition = reordered.findIndex(p => p.id === activeId)
-    const withPositions = reordered.map((p, i) => ({ ...p, position: i }))
-
-    reorderProjects([
-      ...freshProjects.filter(p => p.column_id !== targetColumn),
-      ...withPositions,
-    ])
-
-    // Persist column change + all positions in the target column
-    await moveProject(activeId, targetColumn, finalPosition >= 0 ? finalPosition : 0)
-    await saveColumnOrder(withPositions.map(p => ({ id: p.id, position: p.position })))
-  }
+  const selectedProject = projects.find(p => p.id === selectedId) ?? null
 
   if (loadingProjects) {
     return (
@@ -136,71 +62,165 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Page header */}
-      <div className="flex-shrink-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center shadow-md shadow-blue-200">
-            <LayoutDashboard className="w-4.5 h-4.5 text-white" />
+    <div className="flex h-full overflow-hidden">
+      {/* ── Project list sidebar ── */}
+      <aside className="w-64 flex-shrink-0 bg-white border-r border-gray-100 flex flex-col overflow-hidden">
+        {/* Sidebar header */}
+        <div className="flex-shrink-0 px-4 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center shadow-sm shadow-blue-200">
+              <LayoutDashboard className="w-3.5 h-3.5 text-white" />
+            </div>
+            <h1 className="text-base font-bold text-gray-900">Projects</h1>
+            <span className="text-xs text-gray-400 ml-auto">{projects.length}</span>
           </div>
-          <h1 className="text-xl font-bold text-gray-900">Projects</h1>
-          <span className="text-sm text-gray-400">{projects.length} project{projects.length !== 1 ? 's' : ''}</span>
+          <Button className="w-full justify-center" onClick={() => setShowCreate(true)}>
+            <Plus className="w-3.5 h-3.5" /> New Project
+          </Button>
         </div>
-        <Button onClick={() => setShowCreate(true)}>
-          <Plus className="w-4 h-4" /> New Project
-        </Button>
-      </div>
 
-      {/* Board */}
-      <div className="flex-1 overflow-hidden bg-slate-50">
-        {projects.length === 0 ? (
+        {/* Project list */}
+        <div className="flex-1 overflow-y-auto py-2">
+          {projects.length === 0 ? (
+            <div className="px-4 py-6 text-center">
+              <p className="text-xs text-gray-400">No projects yet.</p>
+            </div>
+          ) : (
+            projects.map(project => {
+              const pCfg = PRIORITY_CONFIG[project.priority as Priority] ?? PRIORITY_CONFIG[2]
+              const isSelected = project.id === selectedId
+              const isDeleting = deleteConfirm === project.id
+
+              return (
+                <div key={project.id} className="px-2">
+                  <button
+                    onClick={() => handleSelectProject(project.id)}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl mb-0.5 transition-all group relative
+                      ${isSelected
+                        ? 'bg-blue-50 shadow-sm'
+                        : 'hover:bg-gray-50'
+                      }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      {/* Priority color bar */}
+                      <span
+                        className="w-1 h-6 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: pCfg.color }}
+                      />
+                      {/* Project color dot */}
+                      <span
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: project.color }}
+                      />
+                      <span className={`text-sm font-medium truncate flex-1
+                        ${isSelected ? 'text-blue-700' : 'text-gray-700'}`}>
+                        {project.title}
+                      </span>
+                      {isSelected && (
+                        <ChevronRight className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                      )}
+                      {/* Delete button */}
+                      <button
+                        onClick={e => { e.stopPropagation(); setDeleteConfirm(project.id) }}
+                        className={`flex-shrink-0 p-0.5 rounded transition-all text-gray-300 hover:text-red-500
+                          ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    {/* Priority label */}
+                    <div className="ml-7 mt-1 flex items-center gap-1">
+                      <Flag className="w-2.5 h-2.5 text-gray-400" />
+                      <span className={`text-xs font-medium ${pCfg.text}`}>
+                        {pCfg.label}
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Inline delete confirmation */}
+                  {isDeleting && (
+                    <div className="mx-1 mb-1 px-3 py-2 bg-red-50 rounded-xl border border-red-100">
+                      <p className="text-xs text-red-700 mb-2">Delete "{project.title}"?</p>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => handleDelete(project.id)}
+                          className="px-2.5 py-1 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                        >
+                          Delete
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm(null)}
+                          className="px-2.5 py-1 text-xs bg-white text-gray-600 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+      </aside>
+
+      {/* ── Project Kanban board ── */}
+      <main className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+        {!selectedProject ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-8">
             <div className="w-20 h-20 bg-blue-100 rounded-2xl flex items-center justify-center mb-4">
               <LayoutDashboard className="w-10 h-10 text-blue-700" />
             </div>
-            <h2 className="text-xl font-bold text-gray-800 mb-2">No projects yet</h2>
+            <h2 className="text-xl font-bold text-gray-800 mb-2">No project selected</h2>
             <p className="text-gray-500 text-sm mb-4 max-w-xs">
-              Create your first project to get started. Drag it between columns as it progresses.
+              Select a project from the sidebar, or create a new one to get started.
             </p>
             <Button onClick={() => setShowCreate(true)}>
               <Plus className="w-4 h-4" /> New Project
             </Button>
           </div>
         ) : (
-          <DndContext
-            sensors={sensors}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-          >
-            <div className="flex gap-4 p-4 overflow-x-auto h-full pb-6">
-              {COLUMNS.map(col => (
-                <ProjectBoardColumn
-                  key={col.id}
-                  columnId={col.id}
-                  projects={getColumnProjects(col.id)}
-                  onAddProject={() => setShowCreate(true)}
+          <>
+            {/* Board header */}
+            <div className="flex-shrink-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: selectedProject.color }}
                 />
-              ))}
+                <h2 className="text-lg font-bold text-gray-900 truncate">{selectedProject.title}</h2>
+                {selectedProject.description && (
+                  <span className="text-sm text-gray-400 truncate hidden sm:block">
+                    — {selectedProject.description}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Priority toggle */}
+                <button
+                  title="Click to change priority"
+                  onClick={() => {
+                    const next: Priority = selectedProject.priority === 1 ? 2 : selectedProject.priority === 2 ? 3 : 1
+                    updateProject(selectedProject.id, { priority: next })
+                  }}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all hover:opacity-80
+                    ${PRIORITY_CONFIG[selectedProject.priority as Priority].bg}
+                    ${PRIORITY_CONFIG[selectedProject.priority as Priority].text}`}
+                >
+                  <Flag className="w-3 h-3" />
+                  {PRIORITY_CONFIG[selectedProject.priority as Priority].label}
+                </button>
+              </div>
             </div>
 
-            <DragOverlay>
-              {activeProject && (
-                <div className="bg-white rounded-xl border border-violet-200 shadow-2xl p-3.5 w-80 rotate-2 opacity-95 cursor-grabbing">
-                  <div className="flex items-center gap-2">
-                    <GripVertical className="w-4 h-4 text-gray-400" />
-                    <span
-                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: activeProject.color }}
-                    />
-                    <p className="text-sm font-semibold text-gray-900 truncate">{activeProject.title}</p>
-                  </div>
-                </div>
-              )}
-            </DragOverlay>
-          </DndContext>
+            {/* Kanban board */}
+            <div className="flex-1 overflow-hidden">
+              <KanbanBoard projectId={selectedProject.id} />
+            </div>
+          </>
         )}
-      </div>
+      </main>
 
       <CreateProjectModal open={showCreate} onClose={() => setShowCreate(false)} />
     </div>
