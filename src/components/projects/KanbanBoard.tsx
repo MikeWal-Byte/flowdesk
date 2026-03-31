@@ -145,9 +145,9 @@ export default function KanbanBoard({ projectId }: Props) {
           ))}
         </div>
 
-        <DragOverlay>
+        <DragOverlay dropAnimation={null}>
           {activeCard && (
-            <div className="bg-white rounded-xl border border-violet-200 shadow-2xl p-3.5 w-72 rotate-2 opacity-95 cursor-grabbing">
+            <div className="bg-white rounded-xl border-2 border-blue-300 shadow-2xl p-3.5 w-[264px] rotate-1 opacity-95 cursor-grabbing">
               <div className="flex items-center gap-2">
                 <GripVertical className="w-4 h-4 text-gray-400" />
                 <p className="text-sm font-semibold text-gray-900 truncate">{activeCard.title}</p>

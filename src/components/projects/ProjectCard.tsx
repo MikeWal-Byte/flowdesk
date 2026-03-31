@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { format } from 'date-fns'
-import { Calendar, Flag, GripVertical, Check, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Calendar, Flag, GripVertical, Check, Plus, Trash2, ChevronDown, ChevronRight, X } from 'lucide-react'
 import Badge from '../ui/Badge'
 import type { ProjectCard as IProjectCard } from '../../types'
 import { PRIORITY_CONFIG } from '../../types'
@@ -23,9 +23,10 @@ export default function ProjectCard({ card, onClick }: Props) {
     isDragging,
   } = useSortable({ id: card.id })
 
-  const { cardTodos, toggleTodo, deleteTodo, createTodo } = useAppStore()
+  const { cardTodos, toggleTodo, deleteTodo, createTodo, deleteCard } = useAppStore()
   const [newTodo, setNewTodo] = useState('')
   const [checklistOpen, setChecklistOpen] = useState(true)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -47,8 +48,8 @@ export default function ProjectCard({ card, onClick }: Props) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-150 group
-        ${isDragging ? 'opacity-40 shadow-2xl scale-105 rotate-1' : ''}
+      className={`bg-white rounded-xl border-2 border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300 transition-shadow duration-150 group
+        ${isDragging ? 'opacity-30' : ''}
       `}
     >
       {/* Priority bar */}
@@ -58,6 +59,27 @@ export default function ProjectCard({ card, onClick }: Props) {
       />
 
       <div className="p-3.5">
+        {/* Delete confirmation overlay */}
+        {confirmDelete && (
+          <div className="mb-2 px-2 py-1.5 bg-red-50 border border-red-100 rounded-lg">
+            <p className="text-xs text-red-700 mb-1.5">Delete this card?</p>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => deleteCard(card.id)}
+                className="px-2 py-0.5 text-xs bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="px-2 py-0.5 text-xs bg-white text-gray-600 rounded-md hover:bg-gray-100 border border-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Title row with drag handle */}
         <div className="flex items-start gap-2 mb-2">
           <div
@@ -79,6 +101,14 @@ export default function ProjectCard({ card, onClick }: Props) {
               <p className="text-xs text-gray-500 line-clamp-2">{card.description}</p>
             )}
           </div>
+          {/* Card delete button */}
+          <button
+            onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
+            className="mt-0.5 flex-shrink-0 p-0.5 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+            title="Delete card"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* Metadata badges */}

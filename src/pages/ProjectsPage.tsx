@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, LayoutDashboard, Trash2, Flag, ChevronRight } from 'lucide-react'
+import { Plus, LayoutDashboard, Trash2, Flag, ChevronRight, CheckCircle2, ChevronDown, Circle } from 'lucide-react'
 import KanbanBoard from '../components/projects/KanbanBoard'
 import CreateProjectModal from '../components/projects/CreateProjectModal'
 import Button from '../components/ui/Button'
@@ -16,6 +16,9 @@ export default function ProjectsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null)
+  const [doneExpanded, setDoneExpanded] = useState(false)
+  const [priorityPickerFor, setPriorityPickerFor] = useState<string | null>(null)
 
   // Load projects on mount
   useEffect(() => {
@@ -35,6 +38,7 @@ export default function ProjectsPage() {
     setSelectedId(id)
     fetchProjectCards(id)
     setDeleteConfirm(null)
+    setPriorityPickerFor(null)
   }
 
   const handleDelete = async (id: string) => {
@@ -52,6 +56,20 @@ export default function ProjectsPage() {
   }
 
   const selectedProject = projects.find(p => p.id === selectedId) ?? null
+
+  const activeProjects = projects.filter(p => p.column_id !== 'completed')
+  const doneProjects = projects.filter(p => p.column_id === 'completed')
+
+  const filteredActive = priorityFilter
+    ? activeProjects.filter(p => p.priority === priorityFilter)
+    : activeProjects
+  const filteredDone = priorityFilter
+    ? doneProjects.filter(p => p.priority === priorityFilter)
+    : doneProjects
+
+  const handleMarkDone = async (id: string, isDone: boolean) => {
+    await updateProject(id, { column_id: isDone ? 'not-started' : 'completed' })
+  }
 
   if (loadingProjects) {
     return (
@@ -79,88 +97,251 @@ export default function ProjectsPage() {
           </Button>
         </div>
 
+        {/* Priority filter */}
+        <div className="flex-shrink-0 px-3 py-2 border-b border-gray-100">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPriorityFilter(null)}
+              className={`flex-1 text-xs py-1 rounded-lg font-medium transition-colors
+                ${priorityFilter === null ? 'bg-gray-800 text-white' : 'text-gray-500 hover:bg-gray-100'}`}
+            >
+              All
+            </button>
+            {([1, 2, 3] as Priority[]).map(p => {
+              const cfg = PRIORITY_CONFIG[p]
+              return (
+                <button
+                  key={p}
+                  onClick={() => setPriorityFilter(priorityFilter === p ? null : p)}
+                  className={`flex-1 text-xs py-1 rounded-lg font-semibold transition-colors
+                    ${priorityFilter === p ? `${cfg.bg} ${cfg.text}` : 'text-gray-500 hover:bg-gray-100'}`}
+                >
+                  P{p}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         {/* Project list */}
         <div className="flex-1 overflow-y-auto py-2">
-          {projects.length === 0 ? (
+          {filteredActive.length === 0 && filteredDone.length === 0 ? (
             <div className="px-4 py-6 text-center">
               <p className="text-xs text-gray-400">No projects yet.</p>
             </div>
           ) : (
-            projects.map(project => {
-              const pCfg = PRIORITY_CONFIG[project.priority as Priority] ?? PRIORITY_CONFIG[2]
-              const isSelected = project.id === selectedId
-              const isDeleting = deleteConfirm === project.id
+            <>
+              {/* Active projects */}
+              {filteredActive.map(project => {
+                const pCfg = PRIORITY_CONFIG[project.priority as Priority] ?? PRIORITY_CONFIG[2]
+                const isSelected = project.id === selectedId
+                const isDeleting = deleteConfirm === project.id
 
-              return (
-                <div key={project.id} className="px-2">
-                  <button
-                    onClick={() => handleSelectProject(project.id)}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl mb-0.5 transition-all group relative
-                      ${isSelected
-                        ? 'bg-blue-50 shadow-sm'
-                        : 'hover:bg-gray-50'
-                      }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      {/* Priority color bar */}
-                      <span
-                        className="w-1 h-6 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: pCfg.color }}
-                      />
-                      {/* Project color dot */}
-                      <span
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: project.color }}
-                      />
-                      <span className={`text-sm font-medium truncate flex-1
-                        ${isSelected ? 'text-blue-700' : 'text-gray-700'}`}>
-                        {project.title}
-                      </span>
-                      {isSelected && (
-                        <ChevronRight className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
-                      )}
-                      {/* Delete button */}
-                      <button
-                        onClick={e => { e.stopPropagation(); setDeleteConfirm(project.id) }}
-                        className={`flex-shrink-0 p-0.5 rounded transition-all text-gray-300 hover:text-red-500
-                          ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-
-                    {/* Priority label */}
-                    <div className="ml-7 mt-1 flex items-center gap-1">
-                      <Flag className="w-2.5 h-2.5 text-gray-400" />
-                      <span className={`text-xs font-medium ${pCfg.text}`}>
-                        {pCfg.label}
-                      </span>
-                    </div>
-                  </button>
-
-                  {/* Inline delete confirmation */}
-                  {isDeleting && (
-                    <div className="mx-1 mb-1 px-3 py-2 bg-red-50 rounded-xl border border-red-100">
-                      <p className="text-xs text-red-700 mb-2">Delete "{project.title}"?</p>
-                      <div className="flex gap-1.5">
+                return (
+                  <div key={project.id} className="px-2 mb-1">
+                    <button
+                      onClick={() => handleSelectProject(project.id)}
+                      className={`w-full text-left px-3 py-2.5 rounded-xl transition-all group relative border-2
+                        ${isSelected
+                          ? 'bg-blue-50 border-blue-200 shadow-sm'
+                          : 'hover:bg-gray-50 border-gray-200 hover:border-gray-300'
+                        }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        {/* Priority color bar */}
+                        <span
+                          className="w-1 h-6 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: pCfg.color }}
+                        />
+                        {/* Project color dot */}
+                        <span
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: project.color }}
+                        />
+                        <span className={`text-sm font-medium truncate flex-1
+                          ${isSelected ? 'text-blue-700' : 'text-gray-700'}`}>
+                          {project.title}
+                        </span>
+                        {isSelected && (
+                          <ChevronRight className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                        )}
+                        {/* Mark done button */}
                         <button
-                          onClick={() => handleDelete(project.id)}
-                          className="px-2.5 py-1 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                          onClick={e => { e.stopPropagation(); handleMarkDone(project.id, false) }}
+                          title="Mark as done"
+                          className={`flex-shrink-0 p-0.5 rounded transition-all text-gray-300 hover:text-emerald-500
+                            ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                         >
-                          Delete
+                          <CheckCircle2 className="w-3.5 h-3.5" />
                         </button>
+                        {/* Delete button */}
                         <button
-                          onClick={() => setDeleteConfirm(null)}
-                          className="px-2.5 py-1 text-xs bg-white text-gray-600 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                          onClick={e => { e.stopPropagation(); setDeleteConfirm(project.id) }}
+                          className={`flex-shrink-0 p-0.5 rounded transition-all text-gray-300 hover:text-red-500
+                            ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                         >
-                          Cancel
+                          <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
-                    </div>
-                  )}
+
+                      {/* Priority — click to open picker */}
+                      <button
+                        onClick={e => {
+                          e.stopPropagation()
+                          setPriorityPickerFor(priorityPickerFor === project.id ? null : project.id)
+                        }}
+                        className="ml-7 mt-1 flex items-center gap-1 hover:opacity-80 transition-opacity"
+                        title="Change priority"
+                      >
+                        <Flag className="w-2.5 h-2.5 text-gray-400" />
+                        <span className={`text-xs font-medium ${pCfg.text}`}>
+                          {pCfg.label} · {pCfg.hint}
+                        </span>
+                      </button>
+                    </button>
+
+                    {/* Inline priority picker */}
+                    {priorityPickerFor === project.id && (
+                      <div className="mx-1 mt-0.5 mb-1 px-2 py-2 bg-white rounded-xl border-2 border-gray-200 shadow-sm">
+                        <p className="text-xs text-gray-400 mb-1.5 px-1">Set priority</p>
+                        <div className="flex gap-1">
+                          {([1, 2, 3] as Priority[]).map(p => {
+                            const cfg = PRIORITY_CONFIG[p]
+                            const active = project.priority === p
+                            return (
+                              <button
+                                key={p}
+                                onClick={() => {
+                                  updateProject(project.id, { priority: p })
+                                  setPriorityPickerFor(null)
+                                }}
+                                className={`flex-1 py-1 rounded-lg text-xs font-semibold transition-all border-2
+                                  ${active
+                                    ? `${cfg.bg} ${cfg.text} border-current`
+                                    : `text-gray-500 border-gray-100 hover:${cfg.bg} hover:${cfg.text}`
+                                  }`}
+                              >
+                                P{p}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Inline delete confirmation */}
+                    {isDeleting && (
+                      <div className="mx-1 mt-0.5 px-3 py-2 bg-red-50 rounded-xl border border-red-100">
+                        <p className="text-xs text-red-700 mb-2">Delete "{project.title}"?</p>
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => handleDelete(project.id)}
+                            className="px-2.5 py-1 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                          >
+                            Delete
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirm(null)}
+                            className="px-2.5 py-1 text-xs bg-white text-gray-600 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              {/* Done section */}
+              {filteredDone.length > 0 && (
+                <div className="px-2 mt-3">
+                  <button
+                    onClick={() => setDoneExpanded(o => !o)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-semibold text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    {doneExpanded
+                      ? <ChevronDown className="w-3.5 h-3.5" />
+                      : <ChevronRight className="w-3.5 h-3.5" />
+                    }
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    Done
+                    <span className="ml-auto bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full text-xs font-medium">
+                      {filteredDone.length}
+                    </span>
+                  </button>
+
+                  {doneExpanded && filteredDone.map(project => {
+                    const pCfg = PRIORITY_CONFIG[project.priority as Priority] ?? PRIORITY_CONFIG[2]
+                    const isSelected = project.id === selectedId
+                    const isDeleting = deleteConfirm === project.id
+
+                    return (
+                      <div key={project.id} className="mb-1">
+                        <button
+                          onClick={() => handleSelectProject(project.id)}
+                          className={`w-full text-left px-3 py-2 rounded-xl transition-all group border-2
+                            ${isSelected
+                              ? 'bg-emerald-50 border-emerald-200 shadow-sm'
+                              : 'hover:bg-gray-50 border-gray-200 hover:border-gray-300'
+                            }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span
+                              className="w-1 h-5 rounded-full flex-shrink-0 opacity-50"
+                              style={{ backgroundColor: pCfg.color }}
+                            />
+                            <span
+                              className="w-2 h-2 rounded-full flex-shrink-0 opacity-60"
+                              style={{ backgroundColor: project.color }}
+                            />
+                            <span className={`text-sm font-medium truncate flex-1 line-through
+                              ${isSelected ? 'text-emerald-700' : 'text-gray-400'}`}>
+                              {project.title}
+                            </span>
+                            {/* Restore button */}
+                            <button
+                              onClick={e => { e.stopPropagation(); handleMarkDone(project.id, true) }}
+                              title="Restore project"
+                              className="flex-shrink-0 p-0.5 rounded transition-all text-gray-300 hover:text-blue-500 opacity-0 group-hover:opacity-100"
+                            >
+                              <Circle className="w-3.5 h-3.5" />
+                            </button>
+                            {/* Delete button */}
+                            <button
+                              onClick={e => { e.stopPropagation(); setDeleteConfirm(project.id) }}
+                              className="flex-shrink-0 p-0.5 rounded transition-all text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </button>
+
+                        {isDeleting && (
+                          <div className="mx-1 mt-0.5 px-3 py-2 bg-red-50 rounded-xl border border-red-100">
+                            <p className="text-xs text-red-700 mb-2">Delete "{project.title}"?</p>
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => handleDelete(project.id)}
+                                className="px-2.5 py-1 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirm(null)}
+                                className="px-2.5 py-1 text-xs bg-white text-gray-600 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
-              )
-            })
+              )}
+            </>
           )}
         </div>
       </aside>
