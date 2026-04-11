@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { format, parseISO, isAfter, isBefore, startOfDay } from 'date-fns'
-import { Plus, Trash2, Check, CheckSquare, Sun, Calendar, Search, X } from 'lucide-react'
+import { Plus, Trash2, Check, CheckSquare, Sun, Calendar, Search, X, Mic, MicOff } from 'lucide-react'
 import Button from '../components/ui/Button'
 import { useAppStore } from '../store/useAppStore'
 
@@ -15,7 +15,36 @@ export default function PlannerPage() {
   const [taskDate, setTaskDate] = useState(today)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [isListening, setIsListening] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  const recognitionRef = useRef<any>(null)
+
+  const handleVoiceInput = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) return
+
+    if (isListening) {
+      recognitionRef.current?.stop()
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'en-US'
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
+
+    recognition.onresult = (e: any) => {
+      const transcript = e.results[0][0].transcript
+      setNewTask(prev => prev ? `${prev} ${transcript}` : transcript)
+    }
+    recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => setIsListening(false)
+
+    recognitionRef.current = recognition
+    recognition.start()
+    setIsListening(true)
+  }
+
   const todayRef = useRef(today)
   todayRef.current = today
 
@@ -84,7 +113,7 @@ export default function PlannerPage() {
   )
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
+    <div className="max-w-2xl mx-auto px-4 py-4 lg:py-8">
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">
@@ -137,10 +166,10 @@ export default function PlannerPage() {
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1 mb-2">Past — Completed</p>
                   <div className="space-y-1.5">
                     {pastCompleted.map(task => (
-                      <div key={task.id} className="flex items-center gap-3 bg-emerald-50 px-4 py-3 rounded-xl border border-emerald-100">
+                      <div key={task.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-emerald-50 px-4 py-3 rounded-xl border border-emerald-100">
                         <Check className="flex-shrink-0 w-4 h-4 text-emerald-500" />
                         <span className="flex-1 text-sm text-gray-500 line-through">{task.text}</span>
-                        <span className="text-xs text-gray-400 flex-shrink-0">
+                        <span className="text-xs text-gray-400 flex-shrink-0 ml-auto">
                           {task.completed_date
                             ? format(parseISO(task.completed_date), 'MMM d, yyyy')
                             : format(parseISO(task.task_date), 'MMM d, yyyy')}
@@ -167,7 +196,7 @@ export default function PlannerPage() {
                       >
                         <button
                           onClick={() => toggleDailyTask(task.id, !task.completed)}
-                          className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors
+                          className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors p-2 box-content
                             ${task.completed
                               ? 'border-emerald-400 bg-emerald-400 text-white hover:bg-emerald-500'
                               : 'border-gray-300 hover:border-blue-600'
@@ -181,7 +210,7 @@ export default function PlannerPage() {
                         <span className="text-xs text-blue-600 font-medium flex-shrink-0">Today</span>
                         <button
                           onClick={() => deleteDailyTask(task.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
+                          className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -197,15 +226,15 @@ export default function PlannerPage() {
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1 mb-2">Upcoming</p>
                   <div className="space-y-1.5">
                     {upcoming.map(task => (
-                      <div key={task.id} className="flex items-center gap-3 bg-white px-4 py-3 rounded-xl border border-gray-100 shadow-sm group hover:border-blue-200 transition-all">
+                      <div key={task.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-white px-4 py-3 rounded-xl border border-gray-100 shadow-sm group hover:border-blue-200 transition-all">
                         <div className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-gray-200" />
                         <span className="flex-1 text-sm text-gray-700">{task.text}</span>
-                        <span className="text-xs text-gray-400 flex-shrink-0">
+                        <span className="text-xs text-gray-400 flex-shrink-0 ml-auto">
                           {format(parseISO(task.task_date), 'MMM d, yyyy')}
                         </span>
                         <button
                           onClick={() => deleteDailyTask(task.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
+                          className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -220,7 +249,7 @@ export default function PlannerPage() {
       ) : (
         <>
           {/* Progress card */}
-          <div className="bg-gradient-to-r from-blue-700 to-indigo-700 rounded-2xl p-5 mb-6 text-white shadow-lg shadow-blue-200">
+          <div className="bg-gradient-to-r from-blue-700 to-indigo-700 rounded-2xl p-4 lg:p-5 mb-5 lg:mb-6 text-white shadow-lg shadow-blue-200">
             <div className="flex items-center justify-between mb-3">
               <span className="font-semibold">Today's Progress</span>
               <span className="text-blue-200 text-sm">{completedCount}/{totalCount} tasks</span>
@@ -238,28 +267,44 @@ export default function PlannerPage() {
 
           {/* Add task */}
           <div className="mb-6">
-            <form onSubmit={handleAdd} className="flex gap-2">
+            <form onSubmit={handleAdd} className="flex flex-col gap-2 sm:flex-row">
               <input
                 value={newTask}
                 onChange={e => setNewTask(e.target.value)}
                 placeholder="Add a task for today…"
                 className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 bg-white shadow-sm"
               />
-              <button
-                type="button"
-                onClick={() => setShowDatePicker(v => !v)}
-                className={`px-3 py-3 border rounded-xl text-sm transition-all shadow-sm ${
-                  showDatePicker || taskDate !== today
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-gray-200 bg-white text-gray-400 hover:text-blue-700 hover:border-blue-400'
-                }`}
-                title="Pick a date"
-              >
-                <Calendar className="w-4 h-4" />
-              </button>
-              <Button type="submit" disabled={!newTask.trim()} size="lg">
-                <Plus className="w-4 h-4" />
-              </Button>
+              <div className="flex gap-2 sm:contents">
+                <button
+                  type="button"
+                  onClick={() => setShowDatePicker(v => !v)}
+                  className={`flex-1 sm:flex-none px-3 py-3 border rounded-xl text-sm transition-all shadow-sm ${
+                    showDatePicker || taskDate !== today
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 bg-white text-gray-400 hover:text-blue-700 hover:border-blue-400'
+                  }`}
+                  title="Pick a date"
+                >
+                  <Calendar className="w-4 h-4 mx-auto" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleVoiceInput}
+                  title={isListening ? 'Stop recording' : 'Voice input'}
+                  className={`flex-1 sm:flex-none px-3 py-3 border rounded-xl text-sm transition-all shadow-sm ${
+                    isListening
+                      ? 'border-red-400 bg-red-50 text-red-600 animate-pulse'
+                      : 'border-gray-200 bg-white text-gray-400 hover:text-blue-700 hover:border-blue-400'
+                  }`}
+                >
+                  <span className="flex justify-center">
+                    {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                  </span>
+                </button>
+                <Button type="submit" disabled={!newTask.trim()} size="lg" className="flex-1 sm:flex-none justify-center">
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
             </form>
             {showDatePicker && (
               <div className="mt-2 flex items-center gap-2">
@@ -268,7 +313,7 @@ export default function PlannerPage() {
                   value={taskDate}
                   min={today}
                   onChange={e => setTaskDate(e.target.value)}
-                  className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 bg-white shadow-sm"
+                  className="w-full sm:w-auto px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 bg-white shadow-sm"
                 />
               </div>
             )}
@@ -300,12 +345,12 @@ export default function PlannerPage() {
                 >
                   <button
                     onClick={() => toggleDailyTask(task.id, true)}
-                    className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-gray-300 hover:border-blue-600 transition-colors"
+                    className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-gray-300 hover:border-blue-600 transition-colors p-2 box-content"
                   />
                   <span className="flex-1 text-sm text-gray-800">{task.text}</span>
                   <button
                     onClick={() => deleteDailyTask(task.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
+                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -323,14 +368,14 @@ export default function PlannerPage() {
                     >
                       <button
                         onClick={() => toggleDailyTask(task.id, false)}
-                        className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-emerald-400 bg-emerald-400 flex items-center justify-center text-white transition-colors hover:bg-emerald-500"
+                        className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-emerald-400 bg-emerald-400 flex items-center justify-center text-white transition-colors hover:bg-emerald-500 p-2 box-content"
                       >
                         <Check className="w-3 h-3" />
                       </button>
                       <span className="flex-1 text-sm text-gray-400 line-through">{task.text}</span>
                       <button
                         onClick={() => deleteDailyTask(task.id)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-red-400 transition-all"
+                        className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-gray-300 hover:text-red-400 transition-all"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

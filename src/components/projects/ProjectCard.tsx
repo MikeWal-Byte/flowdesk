@@ -33,7 +33,7 @@ export default function ProjectCard({ card, onClick }: Props) {
     transition,
   }
 
-  const pConfig = PRIORITY_CONFIG[card.priority]
+  const pConfig = PRIORITY_CONFIG[card.priority] ?? PRIORITY_CONFIG[2]
   const todos = cardTodos.filter(t => t.card_id === card.id)
   const completedCount = todos.filter(t => t.completed).length
 

@@ -121,11 +121,11 @@ export default function KanbanBoard({ projectId }: Props) {
     const finalPosition = reordered.findIndex(c => c.id === activeCardId)
     await moveCard(activeCardId, targetColumn, finalPosition >= 0 ? finalPosition : 0)
 
-    // Update all positions in the column
+    // Use fresh store state after the async moveCard to avoid stale-closure duplicates
     const updates = reordered.map((c, i) => ({ ...c, position: i }))
-    const otherCards = projectCards.filter(c => c.column_id !== targetColumn || c.id === activeCardId ? false : true)
+    const latestCards = useAppStore.getState().projectCards
     reorderCards([
-      ...projectCards.filter(c => c.column_id !== targetColumn),
+      ...latestCards.filter(c => c.column_id !== targetColumn),
       ...updates,
     ])
   }
